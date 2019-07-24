@@ -1,9 +1,7 @@
 use pyo3::AsPyPointer;
 use pyo3::PyObject;
 use pyo3::Python;
-use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
-use std::hash::Hasher;
 use std::os::raw::{c_int, c_void};
 
 use crate::traits::node::*;
@@ -34,9 +32,18 @@ impl FindAdjacent for PyObject {
     }
 }
 
-struct PyObjectWrapper<'p> {
+pub struct PyObjectWrapper<'p> {
     obj: PyObject,
     py: Python<'p>,
+}
+
+impl<'p> Clone for PyObjectWrapper<'p> {
+    fn clone(&self) -> Self {
+        Self {
+            obj: self.obj.clone_ref(self.py),
+            py: self.py,
+        }
+    }
 }
 
 impl<'p> PartialEq for PyObjectWrapper<'p> {
@@ -53,14 +60,6 @@ impl<'p> Hash for PyObjectWrapper<'p> {
         H: std::hash::Hasher,
     {
         self.obj.as_ptr().hash(state)
-    }
-}
-
-impl<'p> NodeHash for PyObjectWrapper<'p> {
-    fn node_hash(&self) -> NodeHashType {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
     }
 }
 
