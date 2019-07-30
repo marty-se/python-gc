@@ -1,6 +1,5 @@
+use pyo3::prelude::*;
 use pyo3::AsPyPointer;
-use pyo3::PyObject;
-use pyo3::Python;
 use std::hash::Hash;
 use std::os::raw::{c_int, c_void};
 
@@ -28,19 +27,25 @@ impl<'p> FindAdjacent for PyObjectWrapper<'p> {
             }
         }
 
-        result.into_iter()
+        result
+            .into_iter()
             .map(|pyobject| PyObjectWrapper {
                 obj: pyobject,
                 py: self.py,
             })
             .collect()
-
     }
 }
 
 pub struct PyObjectWrapper<'p> {
     obj: PyObject,
     py: Python<'p>,
+}
+
+impl<'p> PyObjectWrapper<'p> {
+    fn new(obj: PyObject, py: Python<'p>) -> Self {
+        PyObjectWrapper { obj: obj, py: py }
+    }
 }
 
 impl<'p> Clone for PyObjectWrapper<'p> {
@@ -66,5 +71,30 @@ impl<'p> Hash for PyObjectWrapper<'p> {
         H: std::hash::Hasher,
     {
         self.obj.as_ptr().hash(state)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FindAdjacent;
+    use super::PyObjectWrapper;
+    use pyo3::{prelude::*, types::PyList};
+
+    #[test]
+    fn test_find_adjacent() {
+        // Fix environment first: $ export PYTHONHOME=/anaconda3
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let list = PyList::new(py, &[1, 2, 3]);
+        let list2 = PyList::new(py, &[list]);
+        let list2_obj = list2.to_object(py);
+        let list2_wrapper = PyObjectWrapper::new(list2_obj, py);
+
+        let adjacent: Vec<PyObject> = list2_wrapper
+            .find_adjacent()
+            .into_iter()
+            .map(|wrapper| wrapper.obj)
+            .collect();
+        assert_eq!(adjacent, vec![list.to_object(py)]);
     }
 }
