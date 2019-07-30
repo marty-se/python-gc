@@ -4,7 +4,7 @@ use pyo3::Python;
 use std::hash::Hash;
 use std::os::raw::{c_int, c_void};
 
-use crate::traits::node::*;
+use scc::FindAdjacent;
 
 unsafe extern "C" fn visit(object: *mut pyo3::ffi::PyObject, arg: *mut c_void) -> c_int {
     let py = pyo3::Python::assume_gil_acquired();
@@ -16,9 +16,9 @@ unsafe extern "C" fn visit(object: *mut pyo3::ffi::PyObject, arg: *mut c_void) -
     0
 }
 
-impl FindAdjacent for PyObject {
-    fn find_adjacent(&self) -> Vec<PyObject> {
-        let obj_ptr = self.as_ptr();
+impl<'p> FindAdjacent for PyObjectWrapper<'p> {
+    fn find_adjacent(&self) -> Vec<Self> {
+        let obj_ptr = self.obj.as_ptr();
         let type_obj = unsafe { *(*obj_ptr).ob_type };
         let mut result = Vec::<PyObject>::new();
         if let Some(traverseproc) = type_obj.tp_traverse {
@@ -28,7 +28,13 @@ impl FindAdjacent for PyObject {
             }
         }
 
-        result
+        result.into_iter()
+            .map(|pyobject| PyObjectWrapper {
+                obj: pyobject,
+                py: self.py,
+            })
+            .collect()
+
     }
 }
 
@@ -60,18 +66,5 @@ impl<'p> Hash for PyObjectWrapper<'p> {
         H: std::hash::Hasher,
     {
         self.obj.as_ptr().hash(state)
-    }
-}
-
-impl<'p> FindAdjacent for PyObjectWrapper<'p> {
-    fn find_adjacent(&self) -> Vec<PyObjectWrapper<'p>> {
-        self.obj
-            .find_adjacent()
-            .into_iter()
-            .map(|pyobject| PyObjectWrapper {
-                obj: pyobject,
-                py: self.py,
-            })
-            .collect()
     }
 }

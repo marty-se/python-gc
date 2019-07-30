@@ -1,6 +1,4 @@
-mod scc;
 mod structs;
-mod traits;
 
 #[cfg(test)]
 mod tests {
