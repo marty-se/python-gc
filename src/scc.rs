@@ -163,3 +163,297 @@ impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCIterator<T> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FindAdjacent;
+    use super::Hash;
+    use super::HashMap;
+    use super::SCCCollector;
+    use std::cell::RefCell;
+    use std::cmp::Ordering;
+
+    #[derive(Debug)]
+    struct Graph {
+        edges: HashMap<u64, Vec<u64>>,
+        num_visits: RefCell<HashMap<u64, u64>>,
+    }
+
+    impl Graph {
+        fn new() -> Self {
+            Graph {
+                edges: HashMap::new(),
+                num_visits: RefCell::default(),
+            }
+        }
+
+        fn add_edge(&mut self, src: u64, dst: u64) {
+            if let Some(edges_vec) = self.edges.get_mut(&src) {
+                edges_vec.push(dst);
+            } else {
+                self.edges.insert(src, vec![dst]);
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct Entry<'g> {
+        index: u64,
+        graph: &'g Graph,
+    }
+
+    impl<'g> Ord for Entry<'g> {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.index.cmp(&other.index)
+        }
+    }
+
+    impl<'g> PartialOrd for Entry<'g> {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl<'g> Entry<'g> {
+        fn new(graph: &'g Graph, index: u64) -> Self {
+            Self {
+                index: index,
+                graph: graph,
+            }
+        }
+    }
+
+    impl<'g> PartialEq for Entry<'g> {
+        fn eq(&self, other: &Self) -> bool {
+            self.index == other.index
+        }
+    }
+
+    impl<'g> Eq for Entry<'g> {}
+
+    impl<'g> Hash for Entry<'g> {
+        fn hash<H>(&self, state: &mut H)
+        where
+            H: std::hash::Hasher,
+        {
+            self.index.hash(state)
+        }
+    }
+
+    impl<'g> FindAdjacent for Entry<'g> {
+        fn find_adjacent(&self) -> Vec<Self> {
+            let mut num_visits_map = self.graph.num_visits.borrow_mut();
+            if let Some(num_visits) = num_visits_map.get_mut(&self.index) {
+                *num_visits = *num_visits + 1;
+            } else {
+                num_visits_map.insert(self.index, 1);
+            }
+
+            if let Some(edges) = self.graph.edges.get(&self.index) {
+                edges
+                    .iter()
+                    .map(|index| Self {
+                        index: *index,
+                        graph: self.graph,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+    }
+
+    fn get_sorted_sccs<'g>(root_entry: Entry<'g>) -> Vec<Vec<Entry<'g>>> {
+        let scc_collector = SCCCollector::new(root_entry);
+        let mut result: Vec<Vec<Entry>> = scc_collector
+            .iter()
+            .map(|mut v| {
+                v.sort();
+                v
+            })
+            .collect();
+        result.sort();
+        result
+    }
+
+    #[test]
+    fn test_single_node_with_cycle() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 1);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(result, vec![vec![Entry::new(&graph, 1)]]);
+    }
+
+    #[test]
+    fn test_simple_cycle() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 1);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![vec![Entry::new(&graph, 1), Entry::new(&graph, 2)]]
+        );
+    }
+
+    #[test]
+    fn test_simple_non_cycle() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![vec![Entry::new(&graph, 1)], vec![Entry::new(&graph, 2)]]
+        );
+    }
+
+    #[test]
+    fn test_single_node_and_cycle() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 3);
+        graph.add_edge(3, 2);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![
+                vec![Entry::new(&graph, 1)],
+                vec![Entry::new(&graph, 2), Entry::new(&graph, 3)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_cycle_and_single_node() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 1);
+        graph.add_edge(2, 3);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![
+                vec![Entry::new(&graph, 1), Entry::new(&graph, 2)],
+                vec![Entry::new(&graph, 3)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_dual_cycle() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 1);
+
+        graph.add_edge(2, 3);
+
+        graph.add_edge(3, 4);
+        graph.add_edge(4, 3);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![
+                vec![Entry::new(&graph, 1), Entry::new(&graph, 2)],
+                vec![Entry::new(&graph, 3), Entry::new(&graph, 4)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_cycle_with_dual_edges_to_node() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 1);
+
+        graph.add_edge(1, 3);
+        graph.add_edge(2, 3);
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        assert_eq!(
+            result,
+            vec![
+                vec![Entry::new(&graph, 1), Entry::new(&graph, 2)],
+                vec![Entry::new(&graph, 3)]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_fully_connected_graph() {
+        let mut graph = Graph::new();
+        const NUM_NODES: u64 = 100;
+        for i in 1..NUM_NODES {
+            for j in 1..NUM_NODES {
+                graph.add_edge(i, j);
+            }
+        }
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        let mut expected = Vec::new();
+        for i in 1..NUM_NODES {
+            expected.push(Entry::new(&graph, i));
+        }
+
+        assert_eq!(result, vec![expected]);
+    }
+
+    #[test]
+    fn test_large_acyclic_graph() {
+        let mut graph = Graph::new();
+        const NUM_NODES: u64 = 1000000;
+        for i in 1..NUM_NODES {
+            graph.add_edge(i, i + 1);
+        }
+
+        let result = get_sorted_sccs(Entry::new(&graph, 1));
+
+        let mut expected = Vec::new();
+        for i in 1..NUM_NODES + 1 {
+            expected.push(vec![Entry::new(&graph, i)]);
+        }
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_does_not_traverse_entire_graph_when_fetching_single_scc() {
+        let mut graph = Graph::new();
+        graph.add_edge(1, 2);
+        graph.add_edge(2, 3);
+        graph.add_edge(3, 2);
+
+        graph.add_edge(1, 4);
+
+        let scc_collector = SCCCollector::new(Entry::new(&graph, 1));
+        let result: Vec<Vec<Entry>> = scc_collector
+            .iter()
+            .map(|mut v| {
+                v.sort();
+                v
+            })
+            .take(1)
+            .collect();
+
+        assert_eq!(
+            result,
+            vec![vec![Entry::new(&graph, 2), Entry::new(&graph, 3)],]
+        );
+
+        // The 4 node should never be reached when only a single SCC is fetched from the iterator.
+        assert!(graph.num_visits.borrow().get(&4).is_none());
+    }
+}
