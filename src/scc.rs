@@ -31,16 +31,32 @@ impl<T> NodeState<T> {
     }
 }
 
-pub struct SCCCollector<T: Hash + Eq> {
+pub struct SCCCollector<T> {
+    root_entry: T,
+}
+
+impl<T: Hash + Eq + Clone + FindAdjacent> SCCCollector<T> {
+    pub fn new(root_entry: T) -> Self {
+        Self {
+            root_entry: root_entry,
+        }
+    }
+
+    pub fn iter(&self) -> SCCIterator<T> {
+        SCCIterator::new(self.root_entry.clone())
+    }
+}
+
+pub struct SCCIterator<T: Hash + Eq + Clone> {
     traversal_stack: Vec<T>,
     scc_stack: Vec<T>,
     nodes: HashMap<T, NodeState<T>>,
     index_counter: u64,
 }
 
-impl<T: Hash + Eq + Clone> SCCCollector<T> {
-    pub fn new(root_entry: T) -> Self {
-        let mut scc_state = SCCCollector {
+impl<T: Hash + Eq + Clone> SCCIterator<T> {
+    fn new(root_entry: T) -> Self {
+        let mut scc_state = SCCIterator {
             traversal_stack: Vec::new(),
             scc_stack: Vec::new(),
             nodes: HashMap::new(),
@@ -52,9 +68,9 @@ impl<T: Hash + Eq + Clone> SCCCollector<T> {
 
     fn add_entry(&mut self, entry: T) {
         let entry_ref = &entry;
-        self.add_to_traversal_stack(entry_ref.clone());
-        self.add_to_scc_stack(entry_ref.clone());
         let node_state = NodeState::new(entry_ref.clone(), self.next_index());
+
+        self.traversal_stack.push(entry_ref.clone());
 
         self.nodes.insert(entry, node_state);
     }
@@ -65,17 +81,6 @@ impl<T: Hash + Eq + Clone> SCCCollector<T> {
         next_index
     }
 
-    fn add_to_traversal_stack(&mut self, entry: T) {
-        self.traversal_stack.push(entry);
-    }
-
-    fn add_to_scc_stack(&mut self, entry: T) {
-        let entry_clone = &entry.clone();
-        self.scc_stack.push(entry);
-        let mut node_state = self.nodes.get_mut(&entry_clone).unwrap();
-        node_state.on_scc_stack = true;
-    }
-
     fn handle_found_entry(&mut self, entry: T) {
         if self.nodes.get(&entry).is_none() {
             self.add_entry(entry);
@@ -83,7 +88,7 @@ impl<T: Hash + Eq + Clone> SCCCollector<T> {
     }
 }
 
-impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCCollector<T> {
+impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCIterator<T> {
     type Item = Vec<T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current_entry) = self.traversal_stack.pop() {
@@ -95,17 +100,24 @@ impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCCollector<T> {
                 TraversalState::Initial => {
                     let entry_data = &current_node.data;
                     current_node.traversal_state = TraversalState::Traversed;
+                    let current_entry_ref = &current_entry;
+
+                    self.scc_stack.push(current_entry_ref.clone());
+                    current_node.on_scc_stack = true;
+
                     self.traversal_stack.push(current_entry);
 
-                    let adjacent = entry_data.find_adjacent();
+                    let mut adjacent = entry_data.find_adjacent();
+                    adjacent.reverse();
                     for entry in adjacent {
                         self.handle_found_entry(entry);
                     }
                 }
                 TraversalState::Traversed => {
                     let entry_data = &current_node.data;
-                    let adjacent = entry_data.find_adjacent();
                     let mut updated_lowlink = current_node.lowlink;
+                    let mut adjacent = entry_data.find_adjacent();
+                    adjacent.reverse();
                     for entry in adjacent {
                         let node_state = self.nodes.get(&entry).unwrap();
                         if node_state.on_scc_stack {
@@ -128,9 +140,14 @@ impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCCollector<T> {
                         let mut scc_nodes = Vec::<T>::new();
                         loop {
                             if let Some(cur_scc_entry) = self.scc_stack.pop() {
-                                let cur_scc_node = self.nodes.remove(&cur_scc_entry).unwrap();
-                                scc_nodes.push(cur_scc_node.data);
+                                let mut cur_scc_node = self.nodes.get_mut(&cur_scc_entry).unwrap();
+                                cur_scc_node.on_scc_stack = false;
+                                let mut done = false;
                                 if cur_scc_entry == current_entry {
+                                    done = true;
+                                }
+                                scc_nodes.push(cur_scc_entry);
+                                if done {
                                     break;
                                 }
                             } else {
