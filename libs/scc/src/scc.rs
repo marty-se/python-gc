@@ -6,6 +6,26 @@ use std::vec::Vec;
 
 use crate::traits::node::*;
 
+/// Iterative implementation of Tarjan's algorithm to identify Strongly Connected Components (SCC).
+/// The implementation has been designed to run incrementally. The iterator returned by `iter()`
+/// will traverse the graph on-demand, only visiting nodes required to return the next SCC.
+/// The implementation could make use of some optimization in its current form.
+pub struct SCCCollector<T> {
+    root_entry: T,
+}
+
+impl<T: Hash + Eq + Clone + FindAdjacent> SCCCollector<T> {
+    pub fn new(root_entry: T) -> Self {
+        Self {
+            root_entry: root_entry,
+        }
+    }
+
+    pub fn iter(&self) -> SCCIterator<T> {
+        SCCIterator::new(self.root_entry.clone())
+    }
+}
+
 enum TraversalState {
     Initial,
     Traversed,
@@ -31,22 +51,7 @@ impl<T> NodeState<T> {
     }
 }
 
-pub struct SCCCollector<T> {
-    root_entry: T,
-}
-
-impl<T: Hash + Eq + Clone + FindAdjacent> SCCCollector<T> {
-    pub fn new(root_entry: T) -> Self {
-        Self {
-            root_entry: root_entry,
-        }
-    }
-
-    pub fn iter(&self) -> SCCIterator<T> {
-        SCCIterator::new(self.root_entry.clone())
-    }
-}
-
+/// Iterator that returns a `Vec<T>` for each identified Strongly Connected Component.
 pub struct SCCIterator<T: Hash + Eq + Clone> {
     traversal_stack: Vec<T>,
     scc_stack: Vec<T>,
