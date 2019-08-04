@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::AsPyPointer;
+use std::fmt;
 use std::hash::Hash;
 use std::os::raw::{c_int, c_void};
 
@@ -42,8 +43,14 @@ pub struct PyObjectWrapper<'p> {
     py: Python<'p>,
 }
 
+impl<'p> fmt::Debug for PyObjectWrapper<'p> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PyObjectWrapper({:?})", self.obj)
+    }
+}
+
 impl<'p> PyObjectWrapper<'p> {
-    fn new(obj: PyObject, py: Python<'p>) -> Self {
+    pub fn new(py: Python<'p>, obj: PyObject) -> Self {
         PyObjectWrapper { obj: obj, py: py }
     }
 }
@@ -88,7 +95,7 @@ mod tests {
         let list = PyList::new(py, &[1, 2, 3]);
         let list2 = PyList::new(py, &[list]);
         let list2_obj = list2.to_object(py);
-        let list2_wrapper = PyObjectWrapper::new(list2_obj, py);
+        let list2_wrapper = PyObjectWrapper::new(py, list2_obj);
 
         let adjacent: Vec<PyObject> = list2_wrapper
             .find_adjacent()
