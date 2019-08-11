@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::AsPyPointer;
+use scc::Node;
 use std::fmt;
 use std::hash::Hash;
 use std::os::raw::{c_int, c_void};
@@ -80,6 +81,8 @@ impl<'p> Hash for PyObjectWrapper<'p> {
         self.obj.as_ptr().hash(state)
     }
 }
+
+impl<'p> Node for PyObjectWrapper<'p> {}
 
 #[cfg(test)]
 mod tests {

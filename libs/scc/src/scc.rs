@@ -1,7 +1,5 @@
 use std::cmp::min;
-use std::cmp::Eq;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::vec::Vec;
 
 use crate::traits::node::*;
@@ -14,7 +12,7 @@ pub struct SCCCollector<T> {
     root_entry: T,
 }
 
-impl<T: Hash + Eq + Clone + FindAdjacent> SCCCollector<T> {
+impl<T: Node> SCCCollector<T> {
     pub fn new(root_entry: T) -> Self {
         Self {
             root_entry: root_entry,
@@ -52,14 +50,14 @@ impl<T> NodeState<T> {
 }
 
 /// Iterator that returns a `Vec<T>` for each identified Strongly Connected Component.
-pub struct SCCIterator<T: Hash + Eq + Clone> {
+pub struct SCCIterator<T: Node> {
     traversal_stack: Vec<T>,
     scc_stack: Vec<T>,
     nodes: HashMap<T, NodeState<T>>,
     index_counter: u64,
 }
 
-impl<T: Hash + Eq + Clone> SCCIterator<T> {
+impl<T: Node> SCCIterator<T> {
     fn new(root_entry: T) -> Self {
         let mut scc_state = SCCIterator {
             traversal_stack: Vec::new(),
@@ -93,7 +91,7 @@ impl<T: Hash + Eq + Clone> SCCIterator<T> {
     }
 }
 
-impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCIterator<T> {
+impl<'p, T: Node> Iterator for SCCIterator<T> {
     type Item = Vec<T>;
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current_entry) = self.traversal_stack.pop() {
@@ -172,11 +170,12 @@ impl<'p, T: FindAdjacent + Hash + Eq + Clone> Iterator for SCCIterator<T> {
 #[cfg(test)]
 mod tests {
     use super::FindAdjacent;
-    use super::Hash;
     use super::HashMap;
+    use super::Node;
     use super::SCCCollector;
     use std::cell::RefCell;
     use std::cmp::Ordering;
+    use std::hash::Hash;
 
     #[derive(Debug)]
     struct Graph {
@@ -267,6 +266,8 @@ mod tests {
             }
         }
     }
+
+    impl<'g> Node for Entry<'g> {}
 
     fn get_sorted_sccs<'g>(root_entry: Entry<'g>) -> Vec<Vec<Entry<'g>>> {
         let scc_collector = SCCCollector::new(root_entry);
