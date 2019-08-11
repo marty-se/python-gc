@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn test_large_acyclic_graph() {
         let mut graph = Graph::new();
-        const NUM_NODES: u64 = 1000000;
+        const NUM_NODES: u64 = 10000;
         for i in 1..NUM_NODES {
             graph.add_edge(i, i + 1);
         }
